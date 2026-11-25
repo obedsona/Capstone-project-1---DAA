@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart City Route Optimization System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge">
+        <span class="pulse-dot"></span>
+        <span>URBAN-OS</span>
+      </div>
+      <div>
+        <h1>Smart City Route Optimization System</h1>
+        <p class="subtitle">Shortest Path Engine · Dijkstra’s vs. Bellman-Ford &amp; Graph Size Benchmarking</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="benchmarkBtn" class="btn btn-secondary" type="button">Compare Graph Sizes</button>
+      <button id="resetBtn" class="btn btn-ghost" type="button">Reset Graph</button>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <!-- Left Column: Controls & Graph Editor -->
+    <section class="panel controls-panel">
+      <div class="panel-title-row">
+        <h2>Route &amp; Network Controls</h2>
+        <span class="chip">Live Graph</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="sourceSelect">Source Location</label>
+          <select id="sourceSelect"></select>
+        </div>
+
+        <div class="field">
+          <label for="targetSelect">Destination Location</label>
+          <select id="targetSelect"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="algorithmSelect">Visualization Mode</label>
+        <select id="algorithmSelect">
+          <option value="both">Run Both (Side-by-Side Comparison)</option>
+          <option value="dijkstra">Dijkstra’s Algorithm (Non-negative)</option>
+          <option value="bellman-ford">Bellman-Ford Algorithm (Negative / Cycles)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="presetSelect">City Network Preset</label>
+        <select id="presetSelect">
+          <option value="small">Small City (6 Locations)</option>
+          <option value="medium">Medium Metro (10 Locations)</option>
+          <option value="large">Large Smart Grid (15 Locations)</option>
+          <option value="negative">Negative Edge / Rebate Test (6 Locations)</option>
+        </select>
+      </div>
+
+      <button id="runBtn" class="btn btn-primary full-width" type="button">Compute Optimal Route</button>
+
+      <hr class="divider" />
+
+      <h3>Road Editor (Weighted Edge)</h3>
+      <p class="hint">Click any junction on the graph to set Source/Destination, or click any road badge to edit its weight.</p>
+
+      <div class="form-grid three-col">
+        <div class="field">
+          <label for="edgeFrom">From</label>
+          <select id="edgeFrom"></select>
+        </div>
+        <div class="field">
+          <label for="edgeTo">To</label>
+          <select id="edgeTo"></select>
+        </div>
+        <div class="field">
+          <label for="edgeWeight">Weight</label>
+          <input id="edgeWeight" type="number" step="1" value="8" />
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <button id="saveEdgeBtn" class="btn btn-secondary" type="button">Save Road</button>
+        <button id="removeEdgeBtn" class="btn btn-danger" type="button">Remove Road</button>
+      </div>
+
+      <hr class="divider" />
+
+      <h3>Add City Junction</h3>
+      <div class="form-grid add-node-grid">
+        <div class="field">
+          <label for="newNodeName">Location Name</label>
+          <input id="newNodeName" type="text" maxlength="18" placeholder="e.g., Tech Park" />
+        </div>
+        <div class="field align-end">
+          <button id="addNodeBtn" class="btn btn-secondary full-width" type="button">+ Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Center Column: Interactive Map & Results -->
+    <section class="panel map-panel">
+      <div class="map-header">
+        <div>
+          <h2>Interactive City Road Network</h2>
+          <p id="mapInstruction" class="hint">Next junction click sets: <strong>Source (Green)</strong>. Click any road weight to edit.</p>
+        </div>
+        <div class="legend">
+          <span><i class="dot dot-source"></i>Source</span>
+          <span><i class="dot dot-target"></i>Destination</span>
+          <span><i class="dot dot-dijkstra"></i>Dijkstra</span>
+          <span><i class="dot dot-bellman"></i>Bellman-Ford</span>
+        </div>
+      </div>
+
+      <div class="canvas-wrapper" style="position: relative;">
+        <canvas id="graphCanvas" width="840" height="465" style="width: 100%; height: auto; display: block; cursor: pointer;"></canvas>
+        <svg id="cityMap" viewBox="0 0 840 465" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0;" aria-hidden="true">
+          <g id="layerEdges"></g>
+          <g id="layerWeights"></g>
+          <g id="layerNodes"></g>
+        </svg>
+      </div>
+
+      <div id="alertBanner" class="alert hidden" role="alert"></div>
+
+      <!-- Algorithm Comparison Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card card-dijkstra" id="dijkstraCard">
+          <div class="metric-top">
+            <span class="badge badge-blue">Dijkstra’s Algorithm</span>
+            <span id="dijkstraTime" class="time-pill mono">-- ms</span>
+          </div>
+          <div class="metric-row">
+            <div class="metric-value mono" id="dijkstraCost">--</div>
+            <span class="metric-unit">min cost</span>
+          </div>
+          <div class="metric-path" id="dijkstraPath">No route computed yet</div>
+          <div class="metric-meta mono" id="dijkstraOps">Evaluations / Relaxations: --</div>
+        </div>
+
+        <div class="metric-card card-bellman" id="bellmanCard">
+          <div class="metric-top">
+            <span class="badge badge-purple">Bellman-Ford Algorithm</span>
+            <span id="bellmanTime" class="time-pill mono">-- ms</span>
+          </div>
+          <div class="metric-row">
+            <div class="metric-value mono" id="bellmanCost">--</div>
+            <span class="metric-unit">min cost</span>
+          </div>
+          <div class="metric-path" id="bellmanPath">No route computed yet</div>
+          <div class="metric-meta mono" id="bellmanOps">Edge Relaxations: --</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Step Trace & Benchmark Table -->
+    <section class="panel details-panel">
+      <h2>Execution Trace &amp; Complexity</h2>
+      <div class="complexity-box">
+        <div class="complexity-row">
+          <span>Dijkstra</span>
+          <code class="mono">O((V + E) log V)</code>
+        </div>
+        <div class="complexity-row">
+          <span>Bellman-Ford</span>
+          <code class="mono">O(V · E)</code>
+        </div>
+      </div>
+
+      <h3>Step-by-Step Logs</h3>
+      <div id="traceLog" class="trace-log mono">
+        <p class="muted">Change any dropdown, click a junction/road, or click Compute Optimal Route.</p>
+      </div>
+
+      <hr class="divider" />
+
+      <h3>Graph Size Benchmark</h3>
+      <div id="benchmarkBars" class="benchmark-bars"></div>
+      <div class="table-wrap">
+        <table id="benchmarkTable">
+          <thead>
+            <tr>
+              <th>Graph (V, E)</th>
+              <th>Dijkstra</th>
+              <th>Bellman-Ford</th>
+              <th>Faster</th>
+            </tr>
+          </thead>
+          <tbody id="benchmarkBody">
+            <tr>
+              <td colspan="4" class="muted">Click "Compare Graph Sizes" to benchmark across network sizes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="algorithms.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
